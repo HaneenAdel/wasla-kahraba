@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>وصلة كهرباء | واجهة المالك</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar wrap">
+    <a class="brand" href="index.html"><span class="brand-mark">⚡</span><span><strong>وصلة كهرباء</strong><small>بوابة مالك نقطة الشحن</small></span></a>
+    <a class="outline-button" href="index.html">العودة للبحث</a>
+  </header>
+
+  <main class="wrap owner-main">
+    <section id="loginView" class="login-card">
+      <div class="eyebrow">OWNER ACCESS / 01</div>
+      <h1>دخول المالك</h1>
+      <p>أدخل رمز المالك المرتبط بنقطة الشحن الخاصة بك.</p>
+      <form id="loginForm" class="form-stack">
+        <label>رمز المالك<input id="ownerKey" required placeholder="مثال: demo-owner-1" autocomplete="off" /></label>
+        <button class="primary-button" type="submit">دخول إلى لوحة المالك</button>
+      </form>
+      <p id="loginMessage" class="message error"></p>
+    </section>
+
+    <section id="dashboardView" class="dashboard" hidden>
+      <div class="dashboard-header"><div><div class="eyebrow">OWNER DASHBOARD / 02</div><h1>إدارة نقاط الشحن</h1><p>تظهر هنا النقاط المرتبطة برمز المالك فقط.</p></div><button id="logoutButton" class="outline-button">تسجيل الخروج</button></div>
+      <div id="ownerSummary" class="summary"></div>
+      <div id="ownerPoints" class="owner-points"></div>
+      <p id="ownerMessage" class="message"></p>
+    </section>
+  </main>
+
+  <footer class="footer wrap">وصلة كهرباء · تحديثات المالك تحفظ محليًا في هذا النموذج</footer>
+</body>
+</html>

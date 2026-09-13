@@ -1,0 +1,106 @@
+*{
+    box-sizing:border-box
+} 
+:root{
+    --bg:#eef0f2;--paper:#fff;
+    
+    --ink:#263342;--muted:#71808d;
+    
+    
+    --line:#d5dbe0;--navy:#1b2639;
+    --cyan:#64bdb8;--green:#e8f2dc;
+    --green-text:#5c7c39;
+    --yellow:#fff1d0;
+    --yellow-text:#99701f
+} 
+
+body{
+    margin:0;background:var(--bg);
+    color:var(--ink);font-family:Arial,"Tahoma",sans-serif;
+    line-height:1.6}.wrap{width:min(900px,calc(100% - 32px));
+        margin-inline:auto}.topbar{display:flex;align-items:center;
+            justify-content:space-between;
+            padding:22px 0}
+            
+.brand{
+    display:flex;
+    align-items:center;
+    gap:10px;color:var(--ink);
+    text-decoration:none
+}
+    .brand-mark{
+        display:grid;place-items:center;width:40px;
+        height:40px;border-radius:12px;background:#b8d484;
+        color:var(--navy);font-size:23px}
+        
+        .brand strong,.brand small{display:block}.brand strong{font-size:18px}.brand small{font-size:11px;
+            color:var(--muted)}.outline-button{display:inline-flex;align-items:center;justify-content:center;
+                border:1px solid #c6cfd6;border-radius:8px;background:#fff;color:var(--ink);padding:8px 12px;
+                font:inherit;font-size:12px;font-weight:bold;text-decoration:none;cursor:pointer}
+                .outline-button:hover{border-color:#83a863;color:#557536}.hero{margin-top:28px;padding:38px;
+                    border:1px solid #cbd2d8;border-radius:18px;background:linear-gradient(145deg,#e4e8eb,#d8dde1);
+                    box-shadow:0 14px 30px rgba(45,59,74,.08)}.eyebrow{color:#7e9862;font-size:10px;font-weight:bold;letter-spacing:.14em}
+                    .hero h1,.login-card h1,.dashboard h1{margin:10px 0 0;font-size:36px;letter-spacing:-.04em}
+                    .hero p,.login-card>p,.dashboard-header p{margin:9px 0 0;color:#667482;font-size:14px}
+                    .search-box{display:flex;gap:8px;margin-top:25px;padding:7px;border:1px solid #c7cfd6;
+                        border-radius:10px;background:#fff}.search-box input{min-width:0;flex:1;border:0;outline:0;
+                            padding:9px 11px;font:inherit;font-size:14px}.primary-button{border:0;border-radius:8px;background:var(--navy);
+                                color:white;padding:11px 18px;font:inherit;font-size:13px;font-weight:bold;cursor:pointer}
+                                .primary-button:hover{background:#2c3b55}.message{min-height:20px;margin:12px 0 0;font-size:12px;
+                                    color:var(--green-text)}.error{color:#a35e3b}.section-heading{display:flex;align-items:end;
+                                        justify-content:space-between;margin:36px 0 12px}.section-heading h2{margin:5px 0 0;
+                                            font-size:22px}.muted{color:var(--muted);font-size:12px}
+                                            .points-list,.owner-points{display:grid;gap:10px}.point-card{padding:17px;
+                                                border:1px solid var(--line);border-radius:12px;background:var(--paper);
+                                                box-shadow:0 4px 14px rgba(45,59,74,.04)}.point-top{display:flex;
+                                                    justify-content:space-between;gap:12px}.point-card h3{margin:0;
+                                                        font-size:16px}.point-card p{margin:4px 0 0;color:var(--muted);
+                                                            font-size:12px}.status,.freshness{display:inline-flex;
+                                                                padding:4px 8px;border-radius:20px;font-size:10px;font-weight:bold;white-space:nowrap}
+                                                                .open{background:var(--green);color:var(--green-text)}.busy{background:var(--yellow);
+                                                                    color:var(--yellow-text)}.closed,.stale{background:#edf0f3;color:#6c7885}
+                                                                    .point-meta{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:13px;
+                                                                        padding-top:11px;border-top:1px solid #edf0ec;color:var(--muted);
+                                                                        font-size:11px}.point-meta strong{color:var(--ink)}
+                                                                        .fresh{background:var(--green);color:var(--green-text)}
+                                                                        .outdated{background:var(--yellow);color:var(--yellow-text)}
+                                                                        .notice{margin-top:22px;border-right:3px solid #7d9e54;padding:11px 13px;
+                                                                            background:#e8f0df;color:#5b713c;font-size:12px}.footer{padding:25px 0;
+                                                                                color:#89939c;text-align:center;font-size:11px}
+                                                                                .owner-main{min-height:calc(100vh - 155px)}
+                                                                                .login-card{width:min(470px,100%);
+                                                                                    margin:70px auto;padding:32px;
+                                                                                    border:1px solid var(--line);
+                                                                                    border-radius:18px;background:#fff;
+                                                                                    box-shadow:0 18px 45px rgba(45,59,74,.08)}
+                                                                                    .login-card h1{font-size:30px}
+                                                                                    .form-stack{display:grid;gap:17px;margin-top:24px}
+                                                                                    .form-stack label,.edit-form label{display:block;
+                                                                                        font-size:12px;font-weight:bold}
+                                                                                        .form-stack input,.edit-form input,.edit-form select{
+                                                                                            display:block;
+                                                                                            width:100%;
+                                                                                            height:43px
+                                                                                            ;margin-top:7px;
+                                                                                            padding:0 10px;
+                                                                                            border:1px solid #d2d9df;
+                                                                                            border-radius:8px;
+                                                                                            background:#fff;
+                                                                                            color:var(--ink);
+                                                                                            outline:0;font:inherit;
+                                                                                            font-size:12px}
+                                                                                            .form-stack input:focus,.edit-form input:focus,.edit-form select:focus{
+                                                                                                border-color:#80a75e;box-shadow:0 0 0 4px rgba(128,167,94,.12)}
+                                                                                                .dashboard{padding:20px 0 50px}.dashboard-header{display:flex
+                                                                                                    ;align-items:end;justify-content:space-between;gap:15px;margin:30px 0}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}.summary-card{padding:17px;border-radius:12px;background:var(--navy);color:#fff}.summary-card strong,.summary-card span{display:block}.summary-card strong{font-size:26px}.summary-card span{margin-top:4px;color:#c7d1dc;font-size:11px}.owner-card{padding:19px;border:1px solid var(--line);border-radius:14px;background:#fff}.owner-card h3{margin:0;font-size:16px}.owner-card>p{margin:4px 0 0;color:var(--muted);font-size:12px}.edit-form{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:17px}.edit-form .save{align-self:end;height:43px}.owner-card .freshness{margin-top:12px}.empty{padding:30px;border:1px dashed #c5cdd3;border-radius:12px;background:#fff;color:var(--muted);text-align:center;font-size:13px}@media(max-width:650px){.wrap{width:calc(100% - 24px)}.hero{padding:25px 19px}.hero h1{font-size:29px}.search-box{flex-direction:column}.search-box .primary-button{width:100%}.point-top{display:block}.point-top .status{margin-top:10px}
+                                                                                        .point-meta{
+                                                                                            display:grid;
+                                                                                            grid-template-columns:1fr 1fr;
+                                                                                            gap:7px}
+                                                                                            .login-card
+                                                                                            {margin:35px auto;
+                                                                                            padding:24px 19px}
+        .dashboard-header{align-items:start;flex-direction:column}.summary{gap:7px}
+         .summary-card{padding:12px 9px}.summary-card strong{font-size:22px}.summary-card span{font-size:9px}
+        .edit-form{grid-template-columns:1fr}
+        .edit-form .save{width:100%}}

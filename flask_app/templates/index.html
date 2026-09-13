@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>وصلة كهرباء | نقاط الشحن</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar wrap">
+    <a class="brand" href="index.html"><span><strong>وصلة كهرباء</strong><small>دليل نقاط الشحن</small></span></a>
+    <a class="outline-button" href="owner.html">واجهة المالك</a>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <div class="eyebrow">PUBLIC SEARCH / 01</div>
+      <h1>أين يمكنك شحن هاتفك؟</h1>
+      <p>اكتب المنطقة أو نوع الخدمة، ثم راجع حالة النقطة ووقت آخر تحديث قبل التوجه.</p>
+      <form id="searchForm" class="search-box">
+        <input id="searchInput" type="search" placeholder="مثال: شحن هاتف في الرمال" />
+        <button class="primary-button" type="submit">بحث</button>
+      </form>
+      <p id="searchMessage" class="message"></p>
+    </section>
+
+    <section class="section-heading"><div><div class="eyebrow">CHARGING POINTS / 02</div><h2>نقاط الشحن</h2></div><span id="pointsCount" class="muted"></span></section>
+    <section id="pointsList" class="points-list"></section>
+    <div class="notice">المعلومات يحدّثها مالك نقطة الشحن، وليست تأكيدًا لحظيًا لتوفر الخدمة.</div>
+  </main>
+
+</body>
+</html>
