@@ -1,371 +1,596 @@
+"""Three course agents for Wasla Kahraba.
+Uses the OpenAI-compatible proxy when OPENAI_API_KEY is configured and keeps a
+safe local fallback for classroom/demo runs without an API key.
 """
-llm.py — sends messages to an AI language model via the OpenRouter API.
+from __future__ import annotations
 
-This file is the bridge between your Flask app and an AI model (GPT-3.5).
-When a student types a message in the chat, it travels here, gets sent to
-OpenRouter, and the AI's reply comes back.
-
-KEY CONCEPTS:
-  - API (Application Programming Interface): a way for two programs to talk
-    to each other over the internet. OpenRouter exposes an API we can call.
-  - HTTP POST request: sending data to a server (like submitting a form).
-    We POST the conversation to OpenRouter and it POSTs back the AI reply.
-  - System prompt: instructions given to the AI before the conversation starts.
-    Think of it as the AI's job description.
-"""
-
+import json
 import os
 import re
-import requests
-from flask import session
-from jinja2 import Template
-# The URL we send our messages to.
-# OpenRouter acts as a single gateway to many different AI models.
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+import unicodedata
+from typing import Any
+from difflib import SequenceMatcher
 
-# Which AI model to use. OpenRouter supports many models.
-# Models with ':free' suffix are free to use — no API credits needed.
-# See all available models at: https://openrouter.ai/models
-# QUESTION: What would change if you switched to a different model?
-#           Try 'google/gemma-2-9b-it:free' or 'mistralai/mistral-7b-instruct:free'.
-DEFAULT_MODEL = "openai/gpt-4o-mini"
+MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 
+def _normalize_search_text(value: str) -> str:
+    value = unicodedata.normalize("NFKC", value).lower()
 
-# One shared template for every expert's system prompt. Each expert just
-# fills in different values for role/domain/instructions/context/examples.
-#
-# We use Jinja2 here (not manual string replacement) because it's already a
-# Flask dependency — it's the exact same {{ }} / {% if %} syntax you've been
-# reading in resume.html, just rendering a prompt string instead of a page.
-MASTER_TEMPLATE = Template("""\
-You are a {{ role }}, an expert in {{ domain }}.
+    value = "".join(
+        character
+        for character in value
+        if unicodedata.category(character) != "Mn"
+    )
 
-{{ specific_instructions }}
-{% if background_context %}
-Context:
-{{ background_context }}
-{% endif %}
-{% if few_shot_examples %}
-Examples:
-{{ few_shot_examples }}
-{% endif %}
-Request: {{ request }}
-""", trim_blocks=True, lstrip_blocks=True)
+    value = value.replace("–", "-").replace("—", "-")
 
+    return re.sub(r"\s+", " ", value).strip()
 
-def fill_template(role, domain, specific_instructions, request,
-                   background_context="", few_shot_examples=""):
-    """
-    Render MASTER_TEMPLATE into one expert's full system prompt.
+def _point_name_matches_query(point_name: str, query: str) -> bool:
+    """Match a full point name or a meaningful shortened name in the query."""
 
-    background_context and few_shot_examples are optional: the {% if %}
-    blocks above drop the whole section — header included — when the
-    argument is empty, instead of leaving a dangling "Context:" with
-    nothing underneath it.
-    """
-    return MASTER_TEMPLATE.render(
-        role=role,
-        domain=domain,
-        specific_instructions=specific_instructions,
-        background_context=background_context,
-        few_shot_examples=few_shot_examples,
-        request=request,
-    ).strip()
+    normalized_name = _normalize_search_text(point_name)
+    normalized_query = _normalize_search_text(query)
 
-def send_message(user_message, system_prompt="You are a helpful assistant."):
-    """
-    Send a message to the AI and return its response as a string.
+    if normalized_name in normalized_query:
+        return True
 
-    Args:
-        user_message  (str): The message the user typed in the chat.
-        system_prompt (str): Instructions that define how the AI should behave.
-                             This is sent before the user message, every time.
-
-    Returns:
-        str: The AI's reply text, or an error message if something went wrong.
-
-    HOW IT WORKS:
-        We build a 'messages' list with two entries:
-          1. system — gives the AI its instructions (the resume context)
-          2. user   — the student's actual question
-        We send this list to OpenRouter, which forwards it to the AI model
-        and returns the generated reply.
-
-    # NOTE: This function has no memory — each call starts fresh.
-    #       Every message includes the full system prompt but no chat history.
-    # QUESTION: How would you modify this to remember previous messages?
-    #           Hint: you would need to store past messages and include them
-    #           in the 'messages' list between the system and user entries.
-    """
-    api_key = os.getenv('OPENROUTER_API_KEY')
-
-    # If the .env file is missing or the key was not filled in, tell the user
-    # immediately rather than making a doomed API call that will just hang.
-    if not api_key or api_key == 'paste-your-key-here':
-        return "⚠️ No API key found. Add your OpenRouter key to the .env file and restart the app."
-
-    # The Authorization header tells OpenRouter who we are.
-    # "Bearer" is just a standard prefix for API key authentication.
-    # NEVER hardcode the api_key here — always load it from the .env file.
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:8080"   # identifies our app to OpenRouter
+    ignored_words = {
+        "هل",
+        "يوجد",
+        "نقطة",
+        "الشحن",
+        "شحن",
+        "متاحة",
+        "متاح",
+        "مفتوحة",
+        "مفتوح",
+        "مغلقة",
+        "مغلق",
+        "الفرع",
+        "فرع",
     }
 
-    # The messages list defines the conversation context for the AI.
-    # 'system' sets the AI's role and knowledge before it sees our question.
-    # 'user' is the message the student actually typed.
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": user_message}
+    name_words = [
+        word
+        for word in re.findall(
+            r"[\w\u0600-\u06ff]+",
+            normalized_name,
+        )
+        if word not in ignored_words and len(word) > 2
     ]
 
-    # Send the HTTP POST request to OpenRouter.
-    # timeout=30 means: give up if we don't hear back within 30 seconds.
-    response = requests.post(
-        OPENROUTER_URL,
-        headers=headers,
-        json={"model": DEFAULT_MODEL, "messages": messages},
-        timeout=30
+    query_words = {
+        word
+        for word in re.findall(
+            r"[\w\u0600-\u06ff]+",
+            normalized_query,
+        )
+        if word not in ignored_words and len(word) > 2
+    }
+    matched_words = sum(
+        1
+        for word in name_words
+        if word in query_words
     )
 
-    result = response.json()
-
-    # OpenRouter sometimes returns HTTP 200 but with an 'error' field instead
-    # of 'choices' — this happens with a bad API key or an invalid request.
-    # QUESTION: Print result here and see what OpenRouter actually sends back.
-    if 'error' in result:
-        error_message = result['error'].get('message', 'Unknown API error')
-        return f"⚠️ OpenRouter error: {error_message}"
-
-    if 'choices' not in result:
-        return f"⚠️ Unexpected response from OpenRouter: {result}"
-
-    return result['choices'][0]['message']['content']
+    return matched_words >= 2
 
 
-def handle_ai_chat_request(db, role, message):
-    """
-    Route a chat message to the named expert. role=None keeps Homework 0's
-    original single-prompt behavior as a fallback, so nothing about the
-    basic chat flow breaks while you're building this out.
-    """
-    if role is None:
-        return send_message(message)
+def normalize_arabic(text: str) -> str:
+    text = str(text or "").strip().lower()
 
-    config = db.getLLMRoles()[role]
-    background_context = config['background_context'] or ""
-    if role == "Content Expert":
-        # No page-scraping in this stack -- "current page content" is the
-        # resume data itself, fetched fresh on every request.
-        background_context += "\n" + db.getResumeText()
-
-    system_prompt = fill_template(
-        role=config['role'],
-        domain=config['domain'],
-        specific_instructions=config['specific_instructions'],
-        background_context=background_context,
-        few_shot_examples=config['few_shot_examples'] or "",
-        request=message,
+    text = "".join(
+        char
+        for char in unicodedata.normalize("NFKD", text)
+        if not unicodedata.combining(char)
     )
-    output = send_message(message, system_prompt).strip()
-    print(f"[{role}] generated:\n{output}\n")   # the rubric checks this output
 
-    if role == "Database Read Expert":
-        return execute_read_query(db, output)
-    if role == "Database Semantic Search Expert":
-        return execute_semantic_search(db, output)
-    if role == "Database Write Expert":
-        return execute_write_action(db, output)
-    if role == "Orchestrator":
-        return run_orchestrator_plan(db, message, output)
-    return output   # Content Expert -- output is already the final answer
+    replacements = {
+        "أ": "ا",
+        "إ": "ا",
+        "آ": "ا",
+        "ٱ": "ا",
+        "ى": "ي",
+        "ة": "ه",
+        "ؤ": "و",
+        "ئ": "ي",
+    }
 
-def execute_read_query(db, sql):
-    """
-    Run the Database Read Expert's generated SQL. We refuse anything that
-    isn't a SELECT -- this expert is read-only by design, so there's never
-    a legitimate reason to run anything else, even if a user's message
-    somehow tricks the model into generating something else.
-    """
-    if not sql.strip().upper().startswith("SELECT"):
-        return "Sorry, I couldn't safely answer that question."
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+
+    text = re.sub(r"\bال", "", text)
+    text = re.sub(r"[^\w\s\u0600-\u06ff]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
+
+
+def arabic_tokens(text: str) -> list[str]:
+    return normalize_arabic(text).split()
+
+
+def area_match_score(user_text: str, area: str) -> int:
+    query = normalize_arabic(user_text)
+    normalized_area = normalize_arabic(area)
+
+    if not query or not normalized_area:
+        return 0
+
+    query_tokens = arabic_tokens(query)
+    area_tokens = arabic_tokens(normalized_area)
+
+    score = 0
+
+    if normalized_area in query:
+        score += 100
+
+    if query in normalized_area:
+        score += 80
+
+    for query_token in query_tokens:
+        for area_token in area_tokens:
+            if len(query_token) >= 2 and area_token.startswith(query_token):
+                score += 30
+            elif len(area_token) >= 2 and query_token.startswith(area_token):
+                score += 20
+            elif SequenceMatcher(
+                None,
+                query_token,
+                area_token,
+            ).ratio() >= 0.70:
+                score += 10
+
+    return score
+
+
+def extract_area_from_database(db, text: str) -> str | None:
+    rows = db.query(
+        """
+        SELECT DISTINCT area
+        FROM chargepoint
+        WHERE area IS NOT NULL
+        AND TRIM(area) != ''
+        """
+    )
+
+    areas = [row["area"] for row in rows if row.get("area")]
+
+    if not areas:
+        return None
+
+    ranked_areas = sorted(
+        areas,
+        key=lambda area: area_match_score(text, area),
+        reverse=True,
+    )
+
+    best_area = ranked_areas[0]
+    score = area_match_score(text, best_area)
+
+    return best_area if score >= 20 else None
+
+
+def load_roles(db):
+    return db.get_llm_roles()
+
+
+def _client():
+    if not os.getenv("OPENAI_API_KEY"):
+        return None
     try:
-        return str(db.query(sql))
-    except Exception as error:
-        print(f"Read Expert query failed: {error}")
-        return "Sorry, that question couldn't be answered."
-
-
-def execute_semantic_search(db, output):
-    """
-    Run the Database Semantic Search Expert's output.
-
-    Homework 2: this is a separate expert (its own role, its own executor
-    function here) rather than a second thing the Read Expert might say --
-    the Orchestrator picks this role instead of "Database Read Expert" in
-    its plan whenever a request names something by an abbreviation,
-    paraphrase, or general category that might not match the database's
-    exact wording (e.g. "MSU", "AI skills"). See semanticSearch() in
-    database.py for how the actual comparison works.
-
-    The expert is told (see llm_roles.csv) to respond with exactly one
-    line in the form "<table>|<search text>" -- deliberately the simplest
-    format that still carries both pieces of information, so parsing it
-    is one string split, not a regex.
-    """
-    try:
-        table, query_text = output.strip().split('|', 1)
-        return str(db.semanticSearch(table.strip(), query_text.strip()))
-    except Exception as error:
-        print(f"Semantic search failed: {error}")
-        return "Sorry, that question couldn't be answered."
-    
-def execute_write_action(db, generated_code):
-    """
-    Run the Database Write Expert's generated Python. This genuinely
-    executes model-generated code with exec() -- see "Questions to Think
-    About" below for why that's worth pausing on. `db` is the only thing
-    exposed to it.
-
-    `outcome` is how the generated code reports back what happened -- it's
-    already the full, exact message to show the user (see Step 2), not a
-    bare status, because only the generated code knows which table/element
-    it actually touched.
-
-    NULL=None is a compatibility shim: the model sometimes writes SQL's
-    NULL instead of Python's None for a missing value. Python has no NULL,
-    so without this, that one habit would crash otherwise-correct code
-    with a NameError.
-    """
-    local_vars = {}
-    try:
-        exec(generated_code, {"db": db, "NULL": None}, local_vars)
-    except Exception as error:
-        print(f"Write Expert code failed: {error}")
-        return "Operation was unsuccessful."
-    return local_vars.get("outcome", "Operation was unsuccessful.")
-
-
-def run_orchestrator_plan(db, original_request, plan_text):
-    """
-    Parse the Orchestrator's plan (a Python list of call strings), run each
-    expert call in order, then make one final call to turn the raw results
-    into a single clean reply for the chat UI.
-    """
-    try:
-        clean_plan = plan_text.strip()
-
-        if clean_plan.startswith("```"):
-            clean_plan = re.sub(r"```(?:python)?", "", clean_plan)
-            clean_plan = clean_plan.replace("```", "").strip()
-
-        call_strings = eval(clean_plan)
+        from openai import OpenAI
+        return OpenAI()
     except Exception:
-        print(f"Orchestrator returned an unparseable plan: {plan_text}")
-        return "Sorry, I couldn't plan a response to that."
+        return None
 
-    results = []
-    steps_summary = ""
-    for call_string in call_strings:
-        print(f"[Orchestrator] executing: {call_string}")
 
-        match = re.search(
-            r"""role=['"]([^'"]*)['"],\s*message=['"]([^'"]*)['"]""",
-            call_string
+def _role_prompt(roles: dict[str, dict[str, Any]], name: str, fallback: str) -> str:
+    role = roles.get(name, {})
+    return role.get("specific_instructions") or fallback
+
+
+def synthesize_response(db, request_text: str, points: list[dict[str, Any]]) -> str:
+    roles = load_roles(db)
+    fallback = 'Write a short warm Arabic response based only on the supplied results. Mention last update and uncertainty.'
+    client = _client()
+    if client:
+        try:
+            response = client.chat.completions.create(model=MODEL, messages=[{"role": "system", "content": _role_prompt(roles, "Response Synthesis Expert", fallback)}, {"role": "user", "content": json.dumps({"request": request_text, "points": points}, ensure_ascii=False)}], max_completion_tokens=350)
+            return response.choices[0].message.content.strip()
+        except Exception:
+            pass
+    if not points:
+        return "لم نجد نقطة شحن مطابقة لطلبك وفق آخر البيانات المتاحة."
+    names = " و".join(point["chargepoint_name"] for point in points[:2])
+    return f"قد تكون {names} مناسبة لطلبك وفق آخر تحديث. التوفر قد يتغير، لذلك يُفضّل التحقق قبل التوجه."
+
+
+def extract_update(db, message: str) -> dict[str, Any]:
+    roles = load_roles(db)
+    fallback = 'Extract only explicitly stated status, waiting_count, opening_hours, and note as JSON.'
+    client = _client()
+    if client:
+        try:
+            response = client.chat.completions.create(model=MODEL, messages=[{"role": "system", "content": _role_prompt(roles, "Update Extraction Expert", fallback)}, {"role": "user", "content": message}], response_format={"type": "json_object"}, max_completion_tokens=300)
+            return json.loads(response.choices[0].message.content)
+        except Exception:
+            pass
+    status = None
+    if any(word in message for word in ["مليان", "ممتلئ", "ما في مكان"]): status = "full"
+    elif any(word in message for word in ["مسكر", "مغلق", "مقفول"]): status = "closed"
+    elif any(word in message for word in ["عطل", "متوقف"]): status = "temporarily_off"
+    elif any(word in message for word in ["شغال", "فاتح", "متاح"]): status = "open"
+    match = re.search(r"(?:المنتظرين|انتظار|منتظر)\D*(\d+)", message)
+    hours = re.search(r"(\d{1,2}:\d{2}\s*[-–إلى]\s*\d{1,2}:\d{2})", message)
+    return {"status": status, "waiting_count": int(match.group(1)) if match else None, "opening_hours": hours.group(1) if hours else None, "note": None}
+
+
+def service_matches(
+    requested_service: str,
+    point_service: str,
+) -> bool:
+    requested = normalize_arabic(requested_service)
+    available = normalize_arabic(point_service)
+
+    if not requested or not available:
+        return False
+
+    if requested in {
+        "شحن لابتوب",
+        "شحن كمبيوتر",
+        "شحن حاسوب",
+        "شحن حاسب",
+    }:
+        return any(
+            word in available
+            for word in [
+                "لابتوب",
+                "لاب توب",
+                "كمبيوتر",
+                "حاسوب",
+                "حاسب",
+                "جهاز كبير",
+                "جهاز متوسط",
+                
+            ]
         )
 
-        if not match:
-            print(f"Invalid call string: {call_string}")
-            continue
+    if requested == "شحن هاتف":
+        return (
+            any(
+                word in available
+                for word in [
+                    "هاتف",
+                    "تلفون",
+                    "موبايل",
+                    "جوال",
+                    "هاتف محمول",
+                ]
+            )
+            or "جهاز صغير" in available
+        )
 
-        role, message = match.group(1), match.group(2)
-        response = handle_ai_chat_request(db, role, message)
-        results.append((role, message, response))
-        
-        steps_summary = "\n".join(f"{r}: {resp}" for r, m, resp in results)
-    synthesis_prompt = (
-        f'The user asked: "{original_request}"\n\n'
-        f"Here is what each expert found or did:\n{steps_summary}\n\n"
-        "Write ONE short, clear reply. A Database Write Expert step's result "
-        "is already the exact message to show the user (e.g. 'New Python "
-        "added to the skills table.') -- if one is present, reuse it "
-        "verbatim rather than rephrasing it. Otherwise, summarize the "
-        "other results in plain language. Never mention SQL, Python, code, "
-        "or these internal steps."
-    )
-    return send_message(original_request, synthesis_prompt)
+    if requested in {
+        "شحن جهاز صغير",
+        "شحن جهاز طبي صغير",
+    }:
+        return "جهاز صغير" in available
 
-
-# ======================================================================
-# HOMEWORK 2 — HUMAN VALIDATION WORKFLOW
-#
-# The Write Expert above genuinely deletes/modifies rows via exec(). These
-# three functions gate that behind an explicit yes/no confirmation for any
-# message that looks destructive, instead of letting it run unsupervised.
-# See homework 2/README.md Step 2 for the full walkthrough of why this
-# needs Flask's session (HTTP/WebSocket requests are otherwise stateless --
-# nothing else ties "yes" back to the request it's confirming).
-# ======================================================================
-
-# A fast, predictable keyword scan -- not another AI call -- runs BEFORE
-# anything gets anywhere near the Orchestrator or exec(). See the README's
-# "Known Limitations" for the tradeoffs of this over real intent
-# classification.
-DANGEROUS_KEYWORDS = ['delete', 'remove', 'clear', 'drop', 'destroy']
+    return requested in available
 
 
-def assess_message_risk(message):
-    """
-    Return True if `message` contains a keyword associated with a
-    destructive/irreversible database action.
-    """
-    lowered = message.lower()
-    return any(keyword in lowered for keyword in DANGEROUS_KEYWORDS)
+def point_name_match_score(user_text: str, point_name: str) -> int:
+    query = normalize_arabic(user_text)
+    name = normalize_arabic(point_name)
 
+    if not query or not name:
+        return 0
 
-def request_human_validation(message):
-    """
-    Pause a risky request and ask the user to confirm before anything
-    runs. Stashes the original message in the Flask session under
-    'pending_validation' -- the NEXT message the user sends is then
-    checked (in socket_events.py) against that key, so it's interpreted
-    as the yes/no answer to THIS question rather than a new, unrelated
-    chat message.
-    """
-    session['pending_validation'] = message
-    return (
-        f'This looks like it could delete or modify data: "{message}". '
-        f'Are you sure you want to proceed? (yes/no)'
+    if name in query:
+        return 100
+
+    # مطابقة اسم مختصر مثل:
+    # مركز المجتمع - الفرع الرئيسي
+    short_name = name.replace("نقطه ", "").strip()
+
+    if short_name in query:
+        return 90
+
+    query_tokens = set(arabic_tokens(query))
+    name_tokens = set(arabic_tokens(short_name))
+
+    important_tokens = {
+        token
+        for token in name_tokens
+        if len(token) >= 3
+        and token not in {"الفرع", "نقطه"}
+    }
+
+    matched = sum(
+        1
+        for token in important_tokens
+        if any(
+            token.startswith(query_token)
+            or query_token.startswith(token)
+            for query_token in query_tokens
+            if len(query_token) >= 2
+        )
     )
 
+    if important_tokens and matched == len(important_tokens):
+        return 80
 
-def handle_validation_response(db, response):
-    """
-    Called instead of the normal chat flow whenever session has a
-    'pending_validation' entry waiting -- i.e. the previous reply was a
-    request_human_validation() confirmation prompt, and this message is
-    (hopefully) the user's yes/no answer to it.
+    if matched >= 2:
+        return 50
 
-    "yes"    -> clear the pending state, run the ORIGINAL message through
-                the normal Orchestrator flow (this is where the actual
-                delete/write finally happens)
-    "no"     -> clear the pending state, cancel -- nothing ever reaches
-                the Orchestrator or exec()
-    anything else -> keep the pending state active and ask again, so a
-                typo or unrelated reply doesn't silently cancel or
-                silently proceed
-    """
-    original_message = session['pending_validation']
-    normalized = response.strip().lower()
+    return 0
 
-    if normalized in ('yes', 'y'):
-        session.pop('pending_validation')
-        return handle_ai_chat_request(db, role="Orchestrator", message=original_message)
 
-    if normalized in ('no', 'n'):
-        session.pop('pending_validation')
-        return "Okay, I won't do that. The request was cancelled."
+def find_requested_point(db, text: str) -> dict[str, Any] | None:
+    points = db.get_chargepoints()
 
-    return f'Please answer "yes" or "no" -- do you want me to proceed with: "{original_message}"?'
+    ranked = sorted(
+        points,
+        key=lambda point: point_name_match_score(
+            text,
+            point.get("chargepoint_name", ""),
+        ),
+        reverse=True,
+    )
+
+    if not ranked:
+        return None
+
+    best = ranked[0]
+    score = point_name_match_score(
+        text,
+        best.get("chargepoint_name", ""),
+    )
+
+    return best if score >= 50 else None
+
+
+def find_requested_points(db, text: str) -> list[dict[str, Any]]:
+    query = normalize_arabic(text)
+
+    generic_words = {
+        "نقطه",
+        "نقاط",
+        "مركز",
+        "الفرع",
+        "فرع",
+        "المتاحه",
+        "متاحه",
+        "متاح",
+        "مفتوحه",
+        "مفتوح",
+        "هل",
+        "في",
+        "وين",
+        "شحن",
+    }
+
+    query_tokens = {
+        token
+        for token in arabic_tokens(query)
+        if len(token) >= 3
+        and token not in generic_words
+    }
+
+    if not query_tokens:
+        return []
+
+    matches = []
+
+    for point in db.get_chargepoints():
+        point_name = normalize_arabic(
+            point.get("chargepoint_name", "")
+        )
+
+        point_tokens = set(arabic_tokens(point_name))
+
+        matched = any(
+            query_token in point_name
+            or any(
+                point_token.startswith(query_token)
+                for point_token in point_tokens
+            )
+            for query_token in query_tokens
+        )
+
+        if matched:
+            matches.append(point)
+
+    return matches
+
+def _normalize_search_text(value: str) -> str:
+    value = unicodedata.normalize("NFKC", value).lower()
+
+    value = "".join(
+        character
+        for character in value
+        if unicodedata.category(character) != "Mn"
+    )
+
+    value = value.replace("–", "-").replace("—", "-")
+
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def detect_explicit_area(text: str) -> str | None:
+    normalized = normalize_arabic(text)
+
+    area_aliases = {
+        "المنطقة الشمالية": [
+            "المنطقه الشماليه",
+            "المنطقه الشمال",
+            "بالمنطقة الشمالية",
+            "الشماليه",
+            "الشمال",
+            "شمال",
+        ],
+        "المنطقة الوسطى": [
+            "المنطقه الوسطي",
+            "المنطقه الوسطى",
+            "بالمنطقة الوسطى",
+            "الوسطي",
+            "الوسطى",
+            "الوسط",
+            "وسط",
+        ],
+        "المنطقة الغربية": [
+            "المنطقه الغربيه",
+            "بالمنطقة الغربية",
+            "الغربيه",
+            "الغربية",
+            "الغرب",
+            "غرب",
+        ],
+        "المنطقة الشرقية": [
+            "المنطقه الشرقيه",
+            "بالمنطقة الشرقية",
+            "الشرقيه",
+            "الشرقية",
+            "الشرق",
+            "شرق",
+        ],
+    }
+
+    for canonical_area, aliases in area_aliases.items():
+        for alias in aliases:
+            if normalize_arabic(alias) in normalized:
+                return canonical_area
+
+    return None
+
+def understand_request(db, text: str) -> dict[str, Any]:
+    roles = load_roles(db)
+
+    fallback = (
+        "Extract service, area, and waiting preference as JSON. "
+        "Default service to شحن هاتف."
+    )
+
+    lowered = text.lower()
+
+    laptop_terms = (
+        "لابتوب",
+        "لاب توب",
+        "حاسوب محمول",
+        "كمبيوتر محمول",
+        "laptop",
+        "notebook",
+    )
+
+    requested_laptop = any(term in lowered for term in laptop_terms)
+
+    client = _client()
+
+    if client:
+        try:
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": _role_prompt(
+                            roles,
+                            "Request Understanding Expert",
+                            fallback,
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": text,
+                    },
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "request",
+                        "strict": True,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "service": {
+                                    "type": "string",
+                                },
+                                "area": {
+                                    "type": ["string", "null"],
+                                },
+                                "waiting_preference": {
+                                    "type": "string",
+                                    "enum": ["low", "any"],
+                                },
+                            },
+                            "required": [
+                                "service",
+                                "area",
+                                "waiting_preference",
+                            ],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                max_completion_tokens=300,
+            )
+
+            result = json.loads(
+                response.choices[0].message.content
+            )
+
+            if requested_laptop:
+                result["service"] = "شحن لابتوب"
+
+            return result
+
+        except Exception:
+            pass
+
+    areas = [
+        "المنطقة الوسطى",
+        "المنطقة الغربية",
+        "المنطقة الشرقية",
+        "المنطقة الشمالية",
+        "الوسطى",
+        "الغربية",
+        "الشرقية",
+        "الشمالية",
+        "الرمال",
+    ]
+
+    area = next(
+        (item for item in areas if item in text),
+        None,
+    )
+
+    preference = (
+        "low"
+        if any(
+            word in lowered
+            for word in [
+                "قليل",
+                "كثير",
+                "انتظار",
+                "أستنى",
+                "استنى",
+            ]
+        )
+        else "any"
+    )
+
+    if requested_laptop:
+        service = "شحن لابتوب"
+    elif "طبي" in text:
+        service = "شحن جهاز طبي صغير"
+    else:
+        service = "شحن هاتف"
+
+    return {
+        "service": service,
+        "area": area,
+        "waiting_preference": preference,
+    }
+

@@ -1,39 +1,23 @@
-import os
-import requests
-from dotenv import load_dotenv
+"""Dependency-free deterministic text embeddings for the prototype."""
+from __future__ import annotations
 
-load_dotenv('../.env')
+import hashlib
+import math
+import re
 
-OPENROUTER_EMBEDDINGS_URL = "https://openrouter.ai/api/v1/embeddings"
-EMBEDDING_MODEL = "openai/text-embedding-3-small"
-EMBEDDING_DIMENSIONS = 1536
+DIMENSIONS = 96
 
 
-def generate_embedding(text):
-    """
-    Return a 1536-number vector representing the meaning of `text`.
-    Falls back to a vector of all zeros if the API key is missing/invalid
-    or the request fails -- a zero vector never scores as a strong match
-    against anything, so a bad embedding just means that row won't be
-    found by semantic search until it's fixed, rather than crashing the
-    insert/startup that triggered it.
-    """
-    api_key = os.getenv('OPENROUTER_API_KEY')
+def _tokens(text: str) -> list[str]:
+    return re.findall(r"[\w\u0600-\u06ff]+", text.lower())
 
-    if not text or not text.strip() or not api_key or api_key == 'paste-your-key-here':
-        return [0.0] * EMBEDDING_DIMENSIONS
 
-    try:
-        response = requests.post(
-            OPENROUTER_EMBEDDINGS_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={"model": EMBEDDING_MODEL, "input": text.strip()},
-            timeout=30,
-        )
-        return response.json()['data'][0]['embedding']
-    except Exception as error:
-        print(f"Embedding generation failed: {error}")
-        return [0.0] * EMBEDDING_DIMENSIONS
+def generate_embedding(text: str) -> list[float]:
+    vector = [0.0] * DIMENSIONS
+    for token in _tokens(text):
+        digest = hashlib.sha256(token.encode("utf-8")).digest()
+        index = int.from_bytes(digest[:4], "big") % DIMENSIONS
+        sign = 1.0 if digest[4] % 2 else -1.0
+        vector[index] += sign
+    magnitude = math.sqrt(sum(value * value for value in vector))
+    return [value / magnitude for value in vector] if magnitude else vector

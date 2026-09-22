@@ -4,12 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>وصلة كهرباء | نقاط الشحن</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
 </head>
 <body>
   <header class="topbar wrap">
-    <a class="brand" href="index.html"><span><strong>وصلة كهرباء</strong><small>دليل نقاط الشحن</small></span></a>
-    <a class="outline-button" href="owner.html">واجهة المالك</a>
+      <a class="brand" href="{{ url_for('main.index') }}" aria-label="العودة إلى الصفحة الرئيسية">
+      <img class="brand-logo" src="{{ url_for('static', filename='images/111.webp') }}" alt="شعار وصلة كهرباء" />
+      <span><strong>وصلة كهرباء</strong><small>دليل نقاط الشحن</small></span>
+    </a>
+    <a class="outline-button" href="{{ url_for('main.owner') }}">واجهة المالك <span>←</span></a>
   </header>
 
   <main class="wrap">
@@ -18,16 +22,30 @@
       <h1>أين يمكنك شحن هاتفك؟</h1>
       <p>اكتب المنطقة أو نوع الخدمة، ثم راجع حالة النقطة ووقت آخر تحديث قبل التوجه.</p>
       <form id="searchForm" class="search-box">
-        <input id="searchInput" type="search" placeholder="مثال: شحن هاتف في الرمال" />
-        <button class="primary-button" type="submit">بحث</button>
+        <input id="searchInput" type="search" placeholder="مثال: شحن هاتف في الرمال" autocomplete="off" />
+        <button class="primary-button" type="submit">بحث <span>⌕</span></button>
       </form>
-      <p id="searchMessage" class="message"></p>
+      <div class="suggestions" aria-label="اقتراحات البحث">
+        <span>جرّب البحث عن:</span>
+        <button type="button" data-query="المنطقة الوسطى">المنطقة الوسطى</button>
+        <button type="button" data-query="open">متاحة الآن</button>
+        <button type="button" data-query="شحن هاتف">شحن هاتف</button>
+      </div>
+      <p id="searchMessage" class="message" role="status"></p>
+      <div id="smartReply" class="smart-reply" hidden aria-live="polite">
+        <span class="smart-reply-label">مساعد وصلة كهرباء</span>
+        <p id="smartReplyText"></p>
+      </div>
     </section>
 
-    <section class="section-heading"><div><div class="eyebrow">CHARGING POINTS / 02</div><h2>نقاط الشحن</h2></div><span id="pointsCount" class="muted"></span></section>
-    <section id="pointsList" class="points-list"></section>
+    <section class="section-heading">
+      <div><div class="eyebrow">CHARGING POINTS / 02</div><h2>نقاط الشحن</h2></div>
+      <span id="pointsCount" class="muted"></span>
+    </section>
+    <section id="pointsList" class="points-list" aria-live="polite"></section>
     <div class="notice">المعلومات يحدّثها مالك نقطة الشحن، وليست تأكيدًا لحظيًا لتوفر الخدمة.</div>
   </main>
 
+  <footer class="wrap footer"><span>وصلة كهرباء · دليل بسيط لنقاط الشحن</span><span>بيانات تجريبية للنسخة الأولية</span></footer>
 </body>
 </html>

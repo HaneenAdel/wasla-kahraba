@@ -5,3 +5,6 @@ CREATE TABLE IF NOT EXISTS ownerpoint (
     owner_key   TEXT NOT NULL UNIQUE,
     contact     TEXT
 );
+
+
+

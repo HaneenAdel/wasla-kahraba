@@ -1,6 +1,0 @@
-"experience_id","position_id","name","description","hyperlink","start_date","end_date"
-"1","1","CampusNest :Student Housing Platform","Designed and developed the complete backend infrastructure for a multi-role student housing platform using Laravel, PHP, and MySQL. Implemented 80+ RESTful APIs, authentication with Laravel Sanctum, role-based access control, relational database design, centralized exception handling, and API testing using Postman.","https://github.com/HaneenAdel/campusnest","2025-09-01","2026-04-30"
-"2","1","LaslesVPN Landing Page","Developed a fully responsive landing page using HTML5 and CSS3 with Flexbox and CSS Grid. Focused on responsive design, accessibility, cross-browser compatibility, and modern UI practices.","https://github.com/HaneenAdel/LaslesVPN-website","2024-06-01","2024-07-01"
-"3","1","Store Management System","Built a Java console application following Object-Oriented Programming principles. Implemented inventory management, shopping cart, customer management, input validation, and modular system architecture using ArrayList.","https://github.com/HaneenAdel/Online-Store-System-","2022-01-01","2022-06-01"
-
-
