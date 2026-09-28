@@ -191,20 +191,40 @@ def _role_prompt(roles: dict[str, dict[str, Any]], name: str, fallback: str) -> 
     return role.get("specific_instructions") or fallback
 
 
-def synthesize_response(db, request_text: str, points: list[dict[str, Any]]) -> str:
+def synthesize_response(
+    db,
+    request_text: str,
+    points: list[dict[str, Any]],
+    intent: dict[str, Any] | None = None,
+) -> str:
     roles = load_roles(db)
     fallback = 'Write a short warm Arabic response based only on the supplied results. Mention last update and uncertainty.'
+    service_note = ""
+    if points and (intent or {}).get("service") == "شحن جهاز طبي صغير":
+        explicitly_medical = any(
+            "طبي" in normalize_arabic(str(point.get("service_type", "")))
+            for point in points
+        )
+        if explicitly_medical:
+            service_note = "وتذكر البيانات دعم شحن جهاز صغير وشحن جهاز طبي صغير."
+        else:
+            service_note = (
+                "البيانات تذكر شحن جهاز صغير، لكنها لا تؤكد دعم شحن جهاز طبي صغير تحديدًا؛ "
+                "يُفضّل التأكد من النقطة قبل التوجه."
+            )
+
     client = _client()
     if client:
         try:
             response = client.chat.completions.create(model=MODEL, messages=[{"role": "system", "content": _role_prompt(roles, "Response Synthesis Expert", fallback)}, {"role": "user", "content": json.dumps({"request": request_text, "points": points}, ensure_ascii=False)}], max_completion_tokens=350)
-            return response.choices[0].message.content.strip()
+            generated = response.choices[0].message.content.strip()
+            return f"{generated} {service_note}".strip()
         except Exception:
             pass
     if not points:
         return "لم نجد نقطة شحن مطابقة لطلبك وفق آخر البيانات المتاحة."
     names = " و".join(point["chargepoint_name"] for point in points[:2])
-    return f"قد تكون {names} مناسبة لطلبك وفق آخر تحديث. التوفر قد يتغير، لذلك يُفضّل التحقق قبل التوجه."
+    return f"قد تكون {names} مناسبة لطلبك وفق آخر تحديث. التوفر قد يتغير، لذلك يُفضّل التحقق قبل التوجه. {service_note}".strip()
 
 
 def extract_update(db, message: str) -> dict[str, Any]:
@@ -263,9 +283,12 @@ def service_matches(
                 word in available
                 for word in [
                     "هاتف",
+                    "هواتف",
                     "تلفون",
                     "موبايل",
+                    "موبايلات",
                     "جوال",
+                    "جوالات",
                     "هاتف محمول",
                 ]
             )
@@ -276,7 +299,7 @@ def service_matches(
         "شحن جهاز صغير",
         "شحن جهاز طبي صغير",
     }:
-        return "جهاز صغير" in available
+        return "جهاز صغير" in available or "جهاز طبي صغير" in available
 
     return requested in available
 
@@ -435,6 +458,8 @@ def detect_explicit_area(text: str) -> str | None:
             "المنطقه الوسطي",
             "المنطقه الوسطى",
             "بالمنطقة الوسطى",
+            "المحافظه الوسطي",
+            "المحافظه الوسطى",
             "الوسطي",
             "الوسطى",
             "الوسط",
@@ -463,7 +488,11 @@ def detect_explicit_area(text: str) -> str | None:
             if normalize_arabic(alias) in normalized:
                 return canonical_area
 
-    return None
+    unknown_area = re.search(
+        r"(?:^|\s)(?:في|داخل|ب)\s+منطقه\s+(.+?)(?:[؟?!،,.]\s*|$)",
+        normalized,
+    )
+    return unknown_area.group(1).strip() if unknown_area else None
 
 def understand_request(db, text: str) -> dict[str, Any]:
     roles = load_roles(db)
@@ -485,6 +514,24 @@ def understand_request(db, text: str) -> dict[str, Any]:
     )
 
     requested_laptop = any(term in lowered for term in laptop_terms)
+    normalized_text = normalize_arabic(text)
+    requested_electric_vehicle = any(
+        term in normalized_text
+        for term in (
+            "سياره كهربائيه",
+            "سياره كهربا",
+            "مركبه كهربائيه",
+            "electric vehicle",
+            "electric car",
+            "ev charging",
+            "ev charger",
+        )
+    )
+    requested_medical_device = "طبي" in normalized_text
+    requested_small_device = any(
+        term in normalized_text
+        for term in ("جهاز صغير", "اجهزه صغيره", "اجهزة صغيرة")
+    )
 
     client = _client()
 
@@ -541,30 +588,25 @@ def understand_request(db, text: str) -> dict[str, Any]:
                 response.choices[0].message.content
             )
 
-            if requested_laptop:
+            explicit_area = detect_explicit_area(text)
+            if explicit_area:
+                result["area"] = explicit_area
+
+            if requested_electric_vehicle:
+                result["service"] = "شحن سيارة كهربائية"
+            elif requested_laptop:
                 result["service"] = "شحن لابتوب"
+            elif requested_medical_device:
+                result["service"] = "شحن جهاز طبي صغير"
+            elif requested_small_device:
+                result["service"] = "شحن جهاز صغير"
 
             return result
 
         except Exception:
             pass
 
-    areas = [
-        "المنطقة الوسطى",
-        "المنطقة الغربية",
-        "المنطقة الشرقية",
-        "المنطقة الشمالية",
-        "الوسطى",
-        "الغربية",
-        "الشرقية",
-        "الشمالية",
-        "الرمال",
-    ]
-
-    area = next(
-        (item for item in areas if item in text),
-        None,
-    )
+    area = detect_explicit_area(text)
 
     preference = (
         "low"
@@ -581,10 +623,14 @@ def understand_request(db, text: str) -> dict[str, Any]:
         else "any"
     )
 
-    if requested_laptop:
+    if requested_electric_vehicle:
+        service = "شحن سيارة كهربائية"
+    elif requested_laptop:
         service = "شحن لابتوب"
-    elif "طبي" in text:
+    elif requested_medical_device:
         service = "شحن جهاز طبي صغير"
+    elif requested_small_device:
+        service = "شحن جهاز صغير"
     else:
         service = "شحن هاتف"
 

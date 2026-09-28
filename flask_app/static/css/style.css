@@ -141,6 +141,16 @@ select:focus-visible {
   border-color: #b9cdca;
 }
 
+.danger-button {
+  color: #a43d35;
+  border-color: #e3b6b1;
+}
+
+.danger-button:hover {
+  color: #7f2923;
+  border-color: #c9827b;
+}
+
 /* Public search page */
 main {
   padding-top: 54px;

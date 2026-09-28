@@ -13,7 +13,10 @@
       <img class="brand-logo" src="{{ url_for('static', filename='images/111.webp') }}" alt="شعار وصلة كهرباء" />
       <span><strong>وصلة كهرباء</strong><small>دليل نقاط الشحن</small></span>
     </a>
-    <a class="outline-button" href="{{ url_for('main.owner') }}">واجهة المالك <span>←</span></a>
+    <div class="owner-session-controls">
+      <a id="ownerSessionLink" class="outline-button" href="{{ url_for('main.owner') }}">واجهة المالك <span>←</span></a>
+      <button id="ownerLogoutButton" class="outline-button" type="button" hidden>تسجيل الخروج</button>
+    </div>
   </header>
 
   <main class="wrap">
@@ -28,7 +31,7 @@
       <div class="suggestions" aria-label="اقتراحات البحث">
         <span>جرّب البحث عن:</span>
         <button type="button" data-query="المنطقة الوسطى">المنطقة الوسطى</button>
-        <button type="button" data-query="open">متاحة الآن</button>
+        <button type="button" data-query="مفتوح">مفتوح</button>
         <button type="button" data-query="شحن هاتف">شحن هاتف</button>
       </div>
       <p id="searchMessage" class="message" role="status"></p>

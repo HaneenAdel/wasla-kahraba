@@ -85,7 +85,7 @@ class Database:
         return {row["role"]: row for row in self.query("SELECT * FROM llm_roles")}
 
     def update_chargepoint(self, chargepoint_id: int, data: dict[str, Any]) -> dict[str, Any] | None:
-        allowed = {"status", "waiting_count", "opening_hours", "capacity", "last_update", "embedding"}
+        allowed = {"area", "status", "waiting_count", "opening_hours", "capacity", "service_type", "last_update", "embedding"}
         updates = {key: data[key] for key in allowed if key in data}
         if not updates:
             return self.get_chargepoint(chargepoint_id)
@@ -93,6 +93,60 @@ class Database:
         values = list(updates.values()) + [chargepoint_id]
         self.query(f"UPDATE chargepoint SET {assignments} WHERE chargepoint_id = ?", tuple(values))
         return self.get_chargepoint(chargepoint_id)
+
+    def update_chargepoint_for_owner(self, chargepoint_id: int, owner_id: int, data: dict[str, Any]) -> dict[str, Any] | None:
+        point = self.get_chargepoint(chargepoint_id)
+        if not point or point["owner_id"] != owner_id:
+            return None
+        return self.update_chargepoint(chargepoint_id, data)
+
+    def add_chargepoint_for_owner(self, owner_id: int, data: dict[str, Any]) -> dict[str, Any] | None:
+        payload = {
+            "owner_id": owner_id,
+            "chargepoint_name": str(data.get("chargepoint_name") or "نقطة شحن جديدة").strip() or "نقطة شحن جديدة",
+            "area": str(data.get("area") or "غير محدد").strip() or "غير محدد",
+            "service_type": str(data.get("service_type") or "شحن هاتف").strip() or "شحن هاتف",
+            "description": str(data.get("description") or "تمت الإضافة عبر المساعد").strip() or "تمت الإضافة عبر المساعد",
+            "opening_hours": str(data.get("opening_hours") or "08:00-22:00").strip() or "08:00-22:00",
+            "status": str(data.get("status") or "open").strip() or "open",
+            "capacity": int(data.get("capacity") or 1),
+            "waiting_count": int(data.get("waiting_count") or 0),
+            "last_update": str(data.get("last_update") or ""),
+        }
+        connection = sqlite3.connect(self.db_path)
+        try:
+            connection.execute(
+                "INSERT INTO chargepoint (owner_id, chargepoint_name, area, service_type, description, opening_hours, status, capacity, waiting_count, last_update) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    payload["owner_id"],
+                    payload["chargepoint_name"],
+                    payload["area"],
+                    payload["service_type"],
+                    payload["description"],
+                    payload["opening_hours"],
+                    payload["status"],
+                    payload["capacity"],
+                    payload["waiting_count"],
+                    payload["last_update"],
+                ),
+            )
+            connection.commit()
+            chargepoint_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+            return self.get_chargepoint(chargepoint_id)
+        finally:
+            connection.close()
+
+    def delete_chargepoint_for_owner(self, chargepoint_id: int, owner_id: int) -> bool:
+        point = self.get_chargepoint(chargepoint_id)
+        if not point or point["owner_id"] != owner_id:
+            return False
+        connection = sqlite3.connect(self.db_path)
+        try:
+            connection.execute("DELETE FROM chargepoint WHERE chargepoint_id = ? AND owner_id = ?", (chargepoint_id, owner_id))
+            connection.commit()
+            return connection.total_changes > 0
+        finally:
+            connection.close()
 
     def get_chargepoint(self, chargepoint_id: int) -> dict[str, Any] | None:
         rows = self.query("SELECT * FROM chargepoint WHERE chargepoint_id = ? LIMIT 1", (chargepoint_id,))

@@ -9,11 +9,11 @@
 </head>
 <body>
   <header class="topbar wrap">
-    <a class="brand" href="index.html" aria-label="العودة إلى نقاط الشحن">
+    <a class="brand" href="{{ url_for('main.index') }}" aria-label="العودة إلى نقاط الشحن">
       <img class="brand-logo" src="{{ url_for('static', filename='images/111.webp') }}" alt="شعار وصلة كهرباء" />
       <span><strong>وصلة كهرباء</strong><small>مساحة المالك</small></span>
     </a>
-    <a class="outline-button" href="index.html">العودة للبحث <span>→</span></a>
+    <a class="outline-button" href="{{ url_for('main.index') }}">العودة للبحث <span>→</span></a>
   </header>
 
   <main class="owner-main wrap">
@@ -38,7 +38,7 @@
 
       <div class="stats-row">
         <div class="owner-stat"><strong id="totalPoints">0</strong><span>نقاطي</span></div>
-        <div class="owner-stat"><strong id="openPoints">0</strong><span>متاحة الآن</span></div>
+        <div class="owner-stat"><strong id="openPoints">0</strong><span>مفتوح</span></div>
         <div class="owner-stat"><strong id="totalWaiting">0</strong><span>منتظرون إجمالًا</span></div>
       </div>
 
@@ -47,7 +47,7 @@
         <div id="ownerPoints" class="owner-points"></div>
         <form id="updateForm" class="update-form">
           <label>النقطة<select id="pointSelect"></select></label>
-          <label>الحالة<select id="statusInput"><option value="open">متاحة الآن</option><option value="full">ممتلئة</option><option value="closed">مغلقة</option></select></label>
+          <label>الحالة<select id="statusInput"><option value="open">مفتوح</option><option value="full">ممتلئة</option><option value="closed">مغلقة</option></select></label>
           <label>ساعات العمل<input id="hoursInput" type="text" required /></label>
           <label>السعة<input id="capacityInput" type="number" min="1" required /></label>
           <label>عدد المنتظرين<input id="waitingInput" type="number" min="0" required /></label>

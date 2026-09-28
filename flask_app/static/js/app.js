@@ -1,4 +1,4 @@
-const labels = { open: "متاحة الآن", full: "ممتلئة", closed: "مغلقة" };
+const labels = { open: "مفتوح", full: "ممتلئة", closed: "مغلقة" };
 const list = document.querySelector("#pointsList");
 const count = document.querySelector("#pointsCount");
 const form = document.querySelector("#searchForm");
@@ -6,6 +6,27 @@ const input = document.querySelector("#searchInput");
 const message = document.querySelector("#searchMessage");
 const smartReply = document.querySelector("#smartReply");
 const smartReplyText = document.querySelector("#smartReplyText");
+const ownerSessionLink = document.querySelector("#ownerSessionLink");
+const ownerLogoutButton = document.querySelector("#ownerLogoutButton");
+
+async function updateOwnerSession() {
+  if (!ownerSessionLink || !ownerLogoutButton) return;
+  const response = await fetch("/api/owner/session");
+  if (!response.ok) return;
+  const result = await response.json();
+  if (!result.logged_in) return;
+  ownerSessionLink.textContent = `لوحة المالك: ${result.name}`;
+  ownerLogoutButton.hidden = false;
+}
+
+ownerLogoutButton?.addEventListener("click", async () => {
+  await fetch("/api/owner/logout", { method: "POST" });
+  ownerSessionLink.href = "/owner";
+  ownerSessionLink.textContent = "واجهة المالك ←";
+  ownerLogoutButton.hidden = true;
+  smartReplyText.textContent = "تم تسجيل الخروج من حساب المالك.";
+  smartReply.hidden = false;
+});
 
 function formatDate(value) {
   if (!value) return "غير محدد";
@@ -50,12 +71,15 @@ async function search(query = "") {
   });
   if (!response.ok) throw new Error("تعذر تنفيذ البحث الذكي");
   const result = await response.json();
-  message.textContent = result.points.length
-    ? `نتائج البحث عن: ${query}`
-    : `لم نجد نتائج مطابقة للبحث عن: ${query}`;
+  const points = Array.isArray(result.points) ? result.points : null;
+  message.textContent = points
+    ? points.length
+      ? `نتائج البحث عن: ${query}`
+      : `لم نجد نتائج مطابقة للبحث عن: ${query}`
+    : "مساعد وصلة كهرباء";
   smartReplyText.textContent = result.reply;
   smartReply.hidden = false;
-  render(result.points);
+  if (points) render(points);
 }
 
 form.addEventListener("submit", (event) => {
@@ -66,10 +90,11 @@ form.addEventListener("submit", (event) => {
 });
 document.querySelectorAll("[data-query]").forEach((button) =>
   button.addEventListener("click", () => {
-    input.value = button.dataset.query;
-    search(input.value);
+  input.value = button.dataset.query;
+  search(input.value);
   }),
 );
 search().catch(() => {
   message.textContent = "تعذر تحميل نقاط الشحن.";
 });
+updateOwnerSession().catch(() => {});

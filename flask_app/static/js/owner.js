@@ -1,4 +1,4 @@
-const labels = { open: "متاحة الآن", full: "ممتلئة", closed: "مغلقة" };
+const labels = { open: "مفتوح", full: "ممتلئة", closed: "مغلقة" };
 let activeOwner = null;
 let ownedPoints = [];
 const loginView = document.querySelector("#loginView");
@@ -51,17 +51,12 @@ function loadSelectedPoint() {
     point.chargepoint_name;
   renderOwnedPoints();
 }
-async function login(key) {
-  const response = await fetch("/api/owner/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ owner_key: key }),
-  });
-  if (!response.ok) throw new Error("رمز المالك غير صحيح");
-  activeOwner = await response.json();
+async function showOwnerDashboard(owner) {
+  activeOwner = owner;
   const pointsResponse = await fetch(
     `/api/owners/${activeOwner.owner_id}/chargepoints`,
   );
+  if (!pointsResponse.ok) throw new Error("تعذر تحميل نقاط المالك");
   ownedPoints = await pointsResponse.json();
   loginView.hidden = true;
   dashboardView.hidden = false;
@@ -75,6 +70,24 @@ async function login(key) {
   loadSelectedPoint();
   renderStats();
 }
+
+async function login(key) {
+  const response = await fetch("/api/owner/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ owner_key: key }),
+  });
+  if (!response.ok) throw new Error("رمز المالك غير صحيح");
+  await showOwnerDashboard(await response.json());
+}
+
+fetch("/api/owner/session")
+  .then((response) => response.json())
+  .then((result) => {
+    if (result.logged_in) return showOwnerDashboard(result);
+  })
+  .catch(() => {});
+
 document.querySelector("#loginForm").addEventListener("submit", (e) => {
   e.preventDefault();
   login(ownerKey.value.trim()).catch((error) => {
@@ -83,6 +96,7 @@ document.querySelector("#loginForm").addEventListener("submit", (e) => {
 });
 pointSelect.addEventListener("change", loadSelectedPoint);
 document.querySelector("#logoutButton").addEventListener("click", () => {
+  fetch("/api/owner/logout", { method: "POST" });
   activeOwner = null;
   ownedPoints = [];
   dashboardView.hidden = true;
@@ -116,3 +130,4 @@ document.querySelector("#updateForm").addEventListener("submit", async (e) => {
     saveMessage.textContent = "";
   }, 3500);
 });
+
