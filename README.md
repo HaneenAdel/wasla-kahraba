@@ -36,6 +36,12 @@ python app.py
 
 Then open [http://localhost:8080](http://localhost:8080). Flask runs in development mode; do not use the development server for public deployments.
 
+## Deploy to Render
+
+The repository includes a Render Blueprint in `render.yaml`. Push it to GitHub, then create a Blueprint in Render from this repository. Render installs `requirements.txt`, generates `SECRET_KEY`, and provides the public service URL after deployment.
+
+The free plan uses an ephemeral filesystem. SQLite data changes may be lost when the service restarts or redeploys; use persistent storage or an external database for production.
+
 ## Model Configuration
 
 Search and responses can use local fallback behavior without an API key. To use the OpenAI SDK, set these environment variables before starting the application:
